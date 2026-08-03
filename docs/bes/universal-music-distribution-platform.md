@@ -89,39 +89,45 @@ When a new platform is approved for implementation, BES generates a connector pa
 | `/api/finance`      | Model subscription, commission, revenue-share, enterprise, marketplace, custom, and hybrid agreements. |
 | `/api/partners`     | Manage partner onboarding, requirements, contacts, documents, and integration status.                  |
 | `/api/knowledge`    | Ingest documents, retrieve knowledge records, update graph edges, and create architecture suggestions. |
+| `/api/publishing`   | Publish release posts to Telegram and other social destinations with retries, logs, and previews.      |
 
 ## Data Model Skeleton
 
-| Entity                   | Key Fields                                                                                           |
-| ------------------------ | ---------------------------------------------------------------------------------------------------- |
-| `Artist`                 | `id`, `legalName`, `displayName`, `country`, `taxProfileId`, `verificationStatus`                    |
-| `Release`                | `id`, `artistId`, `title`, `version`, `upc`, `status`, `releaseDate`, `territories`, `approvalState` |
-| `Track`                  | `id`, `releaseId`, `title`, `isrc`, `audioAssetId`, `explicit`, `contributors`, `rightsId`           |
-| `Asset`                  | `id`, `type`, `uri`, `checksum`, `technicalMetadata`, `validationStatus`                             |
-| `RightsClaim`            | `id`, `assetId`, `claimantId`, `territories`, `share`, `startDate`, `endDate`, `evidenceUri`         |
-| `DistributionJob`        | `id`, `releaseId`, `platformId`, `status`, `attempts`, `lastError`, `receiptId`                      |
-| `Platform`               | `id`, `name`, `developerPortal`, `authType`, `submissionModes`, `rateLimits`, `policies`             |
-| `Connector`              | `id`, `platformId`, `version`, `capabilities`, `healthStatus`, `credentialsRef`                      |
-| `AnalyticsFact`          | `id`, `platformId`, `releaseId`, `trackId`, `metric`, `country`, `period`, `value`                   |
-| `RoyaltyStatement`       | `id`, `period`, `payeeId`, `gross`, `deductions`, `net`, `currency`, `status`                        |
-| `Contract`               | `id`, `partnerId`, `type`, `status`, `riskScore`, `approvalRequired`, `effectiveDate`                |
-| `KnowledgeRecord`        | `id`, `sourceId`, `entityType`, `canonicalName`, `summary`, `confidence`, `provenance`               |
-| `ArchitectureSuggestion` | `id`, `knowledgeRecordId`, `suggestedChange`, `impact`, `dependencies`, `status`                     |
-| `ImplementationTask`     | `id`, `suggestionId`, `title`, `acceptanceCriteria`, `dependencies`, `priority`, `status`            |
+| Entity                   | Key Fields                                                                                               |
+| ------------------------ | -------------------------------------------------------------------------------------------------------- |
+| `Artist`                 | `id`, `legalName`, `displayName`, `country`, `taxProfileId`, `verificationStatus`                        |
+| `Release`                | `id`, `artistId`, `title`, `version`, `upc`, `status`, `releaseDate`, `territories`, `approvalState`     |
+| `Track`                  | `id`, `releaseId`, `title`, `isrc`, `audioAssetId`, `explicit`, `contributors`, `rightsId`               |
+| `Asset`                  | `id`, `type`, `uri`, `checksum`, `technicalMetadata`, `validationStatus`                                 |
+| `RightsClaim`            | `id`, `assetId`, `claimantId`, `territories`, `share`, `startDate`, `endDate`, `evidenceUri`             |
+| `DistributionJob`        | `id`, `releaseId`, `platformId`, `status`, `attempts`, `lastError`, `receiptId`                          |
+| `Platform`               | `id`, `name`, `developerPortal`, `authType`, `submissionModes`, `rateLimits`, `policies`                 |
+| `Connector`              | `id`, `platformId`, `version`, `capabilities`, `healthStatus`, `credentialsRef`                          |
+| `AnalyticsFact`          | `id`, `platformId`, `releaseId`, `trackId`, `metric`, `country`, `period`, `value`                       |
+| `RoyaltyStatement`       | `id`, `period`, `payeeId`, `gross`, `deductions`, `net`, `currency`, `status`                            |
+| `Contract`               | `id`, `partnerId`, `type`, `status`, `riskScore`, `approvalRequired`, `effectiveDate`                    |
+| `KnowledgeRecord`        | `id`, `sourceId`, `entityType`, `canonicalName`, `summary`, `confidence`, `provenance`                   |
+| `ArchitectureSuggestion` | `id`, `knowledgeRecordId`, `suggestedChange`, `impact`, `dependencies`, `status`                         |
+| `ImplementationTask`     | `id`, `suggestionId`, `title`, `acceptanceCriteria`, `dependencies`, `priority`, `status`                |
+| `PublicationAccount`     | `id`, `type`, `displayName`, `username`, `avatarUrl`, `favorite`, `lastUsedAt`, `permissionStatus`       |
+| `PublicationJob`         | `id`, `releaseId`, `accountId`, `status`, `attempts`, `lastErrorCode`, `lastErrorMessage`, `nextRetryAt` |
+| `PublishingSettings`     | `id`, `preset`, `toggles`, `layout`, `templateId`, `autosaveRevision`, `previewSnapshotId`               |
 
 ## Events and Workers
 
-| Event                     | Worker                            | Responsibility                                                      |
-| ------------------------- | --------------------------------- | ------------------------------------------------------------------- |
-| `DocumentUploaded`        | `knowledge-ingestion-worker`      | Parse, chunk, classify, extract, and index documents.               |
-| `NewKnowledgeDetected`    | `architecture-suggestion-worker`  | Generate specs, missing-module proposals, and implementation tasks. |
-| `ReleaseSubmitted`        | `release-orchestration-worker`    | Validate metadata, rights, audio, artwork, and approvals.           |
-| `ValidationFailed`        | `remediation-worker`              | Create actionable remediation tasks for artists or administrators.  |
-| `DistributionRequested`   | `distribution-worker`             | Package and submit approved releases through connectors.            |
-| `PlatformReceiptReceived` | `connector-reconciliation-worker` | Reconcile external delivery state with internal jobs.               |
-| `AnalyticsImported`       | `analytics-normalization-worker`  | Normalize platform metrics and update dashboards.                   |
-| `RevenueImported`         | `royalty-calculation-worker`      | Calculate royalties and generate statements.                        |
-| `ContractDraftRequested`  | `contract-drafting-worker`        | Generate contract draft and legal review checklist.                 |
+| Event                         | Worker                            | Responsibility                                                                                      |
+| ----------------------------- | --------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `DocumentUploaded`            | `knowledge-ingestion-worker`      | Parse, chunk, classify, extract, and index documents.                                               |
+| `NewKnowledgeDetected`        | `architecture-suggestion-worker`  | Generate specs, missing-module proposals, and implementation tasks.                                 |
+| `ReleaseSubmitted`            | `release-orchestration-worker`    | Validate metadata, rights, audio, artwork, and approvals.                                           |
+| `ValidationFailed`            | `remediation-worker`              | Create actionable remediation tasks for artists or administrators.                                  |
+| `DistributionRequested`       | `distribution-worker`             | Package and submit approved releases through connectors.                                            |
+| `ReleasePublicationRequested` | `publishing-worker`               | Generate a release post, send it to Telegram, retry temporary failures, and log user-facing errors. |
+| `PublishingSettingsChanged`   | `settings-autosave-worker`        | Autosave instant panel changes and create undo/redo history entries.                                |
+| `PlatformReceiptReceived`     | `connector-reconciliation-worker` | Reconcile external delivery state with internal jobs.                                               |
+| `AnalyticsImported`           | `analytics-normalization-worker`  | Normalize platform metrics and update dashboards.                                                   |
+| `RevenueImported`             | `royalty-calculation-worker`      | Calculate royalties and generate statements.                                                        |
+| `ContractDraftRequested`      | `contract-drafting-worker`        | Generate contract draft and legal review checklist.                                                 |
 
 ## Human Approval Gates
 
@@ -146,7 +152,8 @@ BES must not submit documents to external organizations, accept legal obligation
 7. Add workers, events, queues, retry policies, and observability dashboards.
 8. Add human approval workflows for legal, financial, external-submission, and live-distribution actions.
 9. Add automated documentation generation from knowledge records, connectors, and OpenAPI definitions.
-10. Add acceptance tests for ingestion, release submission, connector generation, royalty calculations, and contract approval gates.
+10. Add acceptance tests for ingestion, release submission, connector generation, royalty calculations, publication retries, Telegram error handling, autosave, and contract approval gates.
+11. Implement the fast publication settings panel described in [Release Publishing and Fast Settings UX](./release-publishing-ux.md).
 
 ## Task Queue Seed
 
