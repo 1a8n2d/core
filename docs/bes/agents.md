@@ -18,6 +18,19 @@ Each agent is defined with mission, input, output, memory, context, permissions,
 | Monitoring Agent         | Observe pipelines, connectors, workers, and compliance gates.              | Events, logs, metrics, traces                     | Alerts, health reports, SLO violations                   | Incident history                         | SLOs, runbooks, connector health policy                         | Read telemetry, create incidents            | Retry alert delivery 3 times                                               | MTTA, false alert rate, coverage                          | All services                                       |
 | Platform Discovery Agent | Discover platform developer resources, requirements, and constraints.      | Platform names, URLs, public docs, partner docs   | Platform profile, requirement matrix, connector proposal | Discovery history, source reliability    | Platform registry, policy schema                                | Read public or provided materials only      | Retry fetch/parse with backoff; require review for gated docs              | Requirement completeness, source confidence               | Knowledge Agent, Integration Agent                 |
 
+## Knowledge OS Agent Duties
+
+All specialized agents operate under the Knowledge OS contract:
+
+1. Search persistent project memory, registries, source history, documents, hooks, tools, APIs, workflows, and relevant runtime typings before creating any new object.
+2. Apply the Never Duplicate rule by extending canonical objects instead of creating parallel copies.
+3. Register every new API, tool, workflow, hook, job, table, cache, permission, UI page, document, rule, model, and knowledge record in the Universal Registry.
+4. Update generated documentation, examples, tests, dependency maps, and graph relationships as part of the same workflow that changes code or configuration.
+5. Save useful discoveries and corrected assumptions back into project memory and agent meta-memory.
+6. Prefer knowledge merge over document replacement, preserving provenance, backlinks, indexes, and graph edges.
+
+The agent loop is Observation → Memory → Hypothesis → Simulation → Decision → Execution → Learning → Optimization → Memory. External side effects still require the approval gates defined below.
+
 ## Shared Agent Safeguards
 
 - Agents may generate drafts, specifications, internal tasks, and recommendations without external side effects.
