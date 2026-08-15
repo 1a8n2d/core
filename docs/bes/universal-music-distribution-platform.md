@@ -4,6 +4,64 @@
 
 This specification extends BES (Bot Evolution System) with an enterprise-grade Universal Music Distribution Platform that manages the full lifecycle of a digital music release, from artist onboarding through royalties, analytics, contracts, partner management, and administration.
 
+## Knowledge OS Philosophy
+
+BES is a Knowledge OS: it must design, operate, document, and improve itself from project memory instead of forcing users to manage technical structure manually. Users describe intentions and business goals; the platform is responsible for discovering existing assets, choosing technical structures, maintaining data models, documents, hooks, background jobs, knowledge graphs, registries, tests, migrations, indexes, links, architecture changes, and accumulated learning.
+
+Before creating any new object, BES must discover and reuse existing knowledge wherever possible. Every new fact, API, workflow, tool, hook, job, model, document, rule, permission, and UI surface must be integrated into the unified project knowledge space with provenance, relationships, and retrieval metadata.
+
+### Persistent Project Memory
+
+Agents must not rely on guesswork when project knowledge already exists. For every task, the responsible agent must inspect the relevant scope of the codebase, project history, documents, hooks, tools, APIs, pages, workflows, registries, and knowledge records before deciding that something is missing. Discovery results must be saved back into persistent memory so the same capability is not rediscovered from scratch in future tasks.
+
+### Never Duplicate Rule
+
+If an object already exists, BES must update, extend, or refactor it instead of creating a competing object. Names such as `release2`, `release_final`, `release_new`, `release_copy`, and `release_v4` are anti-patterns. The correct flow is to find the canonical object, read it, identify the right insertion point, merge the change, update backlinks, update indexes, and update the knowledge graph.
+
+### Self-Growing Knowledge
+
+Every useful discovery becomes durable knowledge. When an agent first learns that a capability such as `scheduleJobAt` exists, it must register the capability, examples, constraints, source references, and known usage patterns so later agents can retrieve that answer directly instead of repeating the investigation.
+
+### Runtime Documentation
+
+Documentation is generated and verified from runtime knowledge, not maintained as a disconnected artifact. Creating or changing a tool, API, workflow, event, storage object, permission, or connector must trigger documentation updates, examples, schema/type updates, dependency maps, tests, and registry entries.
+
+### Semantic Workspace
+
+BES should hide implementation workspace mechanics from the user. A request such as "build a release publication system" should cause BES to derive the required domain, knowledge records, agents, hooks, events, storage, views, jobs, APIs, indexes, and permissions without exposing that internal scaffolding unless review is needed.
+
+### Auto Knowledge Builder
+
+Every code-writing workflow must update the unified knowledge space. Creating an API must update the API registry, generated documentation, tests, types, dependency map, and knowledge graph. Creating a worker must update event contracts, queue policy, observability metadata, retry policy, and operational runbooks.
+
+### Knowledge Graph First
+
+The authoritative project model is a graph rather than a folder tree. BES must represent typed relationships such as `Artist creates Release`, `Release uses Distribution`, `Distribution uses DSP`, and `DSP has Audience`, and it must keep those relationships synchronized with code, documents, storage, permissions, and workflows.
+
+### Universal Registry
+
+BES must automatically register APIs, tools, workflows, agents, prompts, hooks, jobs, tables, caches, permissions, UI pages, documents, knowledge records, rules, and models. Registry records must include owner, purpose, lifecycle state, dependencies, examples, tests, provenance, and links into the knowledge graph.
+
+### Auto Refactoring
+
+BES should continuously inspect project knowledge and implementation artifacts for duplicate code, dead code, stale knowledge, unused documents, repeated hooks, conflicting rules, and orphaned registry records. Safe changes may be proposed or automated according to risk policy; destructive changes require auditability and, where appropriate, human approval.
+
+### Evolution Engine and Meta Memory
+
+Each agent should follow an improvement loop: Observation, Memory, Hypothesis, Simulation, Decision, Execution, Learning, Optimization, and Memory. BES must also maintain meta-memory about agent behavior: repeated mistakes, successful decisions, ineffective tools, effective prompts, failure causes, and remediation patterns. This meta-memory must influence future planning and quality gates.
+
+### Self-Generated Knowledge Base
+
+Users should not have to create docs, knowledge folders, hooks, registries, wiki pages, notes, FAQs, changelogs, or migration guides by hand. When BES creates a meaningful artifact, it must determine the required knowledge-base updates and generate descriptions, examples, tests, dependency maps, FAQs, changelog entries, and migration guidance automatically.
+
+### Knowledge Merge
+
+Documentation and knowledge changes must be merged into canonical records. If `Music.md` already exists, BES must not create `Music2.md` or `Music_new.md`; it must read `Music.md`, analyze the existing structure, update the correct section, refresh links, update indexes, and update graph relationships.
+
+### Chatium Capability Discovery Rule
+
+Before concluding that a Chatium function, package, runtime module, or typing is unavailable, an agent must check official Chatium documentation, runtime typings and available modules, existing project usage, and the internal project knowledge registry. If later evidence proves the capability exists, BES must update the knowledge base so future agents do not repeat the same mistake.
+
 ## Target Value Stream
 
 ```mermaid
