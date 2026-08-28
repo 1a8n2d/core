@@ -1,0 +1,136 @@
+openapi: 3.1.0
+info:
+  title: BES Universal Music Distribution API
+  version: 0.1.0
+  summary: Draft API surface for BES music distribution architecture.
+paths:
+  /api/knowledge/ingestions:
+    post:
+      summary: Ingest a raw document and trigger the knowledge pipeline.
+      x-bes-module: Knowledge Engine
+      responses:
+        '202': { description: Ingestion accepted }
+  /api/knowledge/records:
+    get:
+      summary: Search canonical BES knowledge records.
+      x-bes-module: Knowledge Engine
+      responses:
+        '200': { description: Knowledge records }
+  /api/releases:
+    post:
+      summary: Create a release draft.
+      x-bes-module: Release Manager
+      responses:
+        '201': { description: Release created }
+    get:
+      summary: List releases.
+      x-bes-module: Release Manager
+      responses:
+        '200': { description: Releases }
+  /api/releases/{releaseId}/submit:
+    post:
+      summary: Submit a release into validation and approval workflow.
+      x-bes-module: Release Manager
+      responses:
+        '202': { description: Release submission accepted }
+  /api/metadata/normalize:
+    post:
+      summary: Normalize release metadata against BES and platform rules.
+      x-bes-module: Metadata Engine
+      responses:
+        '200': { description: Normalized metadata }
+  /api/rights/clearance:
+    post:
+      summary: Evaluate rights clearance and territory restrictions.
+      x-bes-module: Rights Engine
+      responses:
+        '200': { description: Clearance result }
+  /api/distribution/jobs:
+    post:
+      summary: Create a distribution job after required approvals.
+      x-bes-module: Distribution Engine
+      x-human-approval-required: true
+      responses:
+        '202': { description: Distribution job accepted }
+  /api/platforms:
+    post:
+      summary: Register a platform profile.
+      x-bes-module: Platform Registry
+      responses:
+        '201': { description: Platform registered }
+    get:
+      summary: List platform profiles and connector status.
+      x-bes-module: Platform Registry
+      responses:
+        '200': { description: Platforms }
+  /api/connectors/generate:
+    post:
+      summary: Generate a connector specification and code skeleton proposal.
+      x-bes-module: Platform Connectors
+      responses:
+        '202': { description: Connector generation task accepted }
+  /api/analytics/reports:
+    get:
+      summary: Query analytics reports for streams, revenue, audience, growth, and forecasts.
+      x-bes-module: Analytics Engine
+      responses:
+        '200': { description: Analytics report }
+  /api/royalties/statements:
+    post:
+      summary: Generate a draft royalty statement from revenue and split inputs.
+      x-bes-module: Royalty Engine
+      responses:
+        '202': { description: Royalty statement generation accepted }
+  /api/contracts/drafts:
+    post:
+      summary: Generate contract drafts, appendices, commercial offers, and human review checklists.
+      x-bes-module: Contract Engine
+      x-external-commitment-forbidden-without-approval: true
+      responses:
+        '202': { description: Contract drafting accepted }
+  /api/finance/models:
+    post:
+      summary: Create or simulate subscription, commission, revenue-share, enterprise, white-label, marketplace, custom, or hybrid financial models.
+      x-bes-module: Financial Engine
+      responses:
+        '201': { description: Financial model created }
+  /api/partners:
+    post:
+      summary: Create a partner profile and onboarding workflow.
+      x-bes-module: Partner Portal
+      responses:
+        '201': { description: Partner created }
+components:
+  schemas:
+    KnowledgeRecord:
+      type: object
+      required:
+        [id, sourceId, entityType, canonicalName, confidence, provenance]
+      properties:
+        id: { type: string }
+        sourceId: { type: string }
+        entityType: { type: string }
+        canonicalName: { type: string }
+        summary: { type: string }
+        confidence: { type: number, minimum: 0, maximum: 1 }
+        provenance: { type: array, items: { type: string } }
+    Release:
+      type: object
+      required: [id, artistId, title, status]
+      properties:
+        id: { type: string }
+        artistId: { type: string }
+        title: { type: string }
+        version: { type: string }
+        upc: { type: string }
+        status: { type: string }
+        releaseDate: { type: string, format: date }
+    PlatformConnectorManifest:
+      type: object
+      required: [platformId, capabilities, authType, approvalPolicy]
+      properties:
+        platformId: { type: string }
+        capabilities: { type: array, items: { type: string } }
+        authType: { type: string }
+        approvalPolicy:
+          { type: string, enum: [internal_only, human_approval_required] }
