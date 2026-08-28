@@ -2169,6 +2169,156 @@ describe('e2e: Transition', () => {
       E2E_TIMEOUT,
     )
 
+    // a parent update arriving while the timed-out fallback swap is waiting
+    // for the leaving branch's afterLeave must not drop the resolved branch
+    test(
+      'parent update during timed-out fallback swap with out-in transition',
+      async () => {
+        await page().evaluate(() => {
+          const { createApp, shallowRef, ref, h, defineAsyncComponent } = (
+            window as any
+          ).Vue
+          const One = {
+            setup() {
+              return () => h('div', { class: 'test' }, 'one')
+            },
+          }
+          const Two = {
+            async setup() {
+              return () => h('div', { class: 'test' }, 'two')
+            },
+          }
+          const AsyncTwo = defineAsyncComponent(
+            () =>
+              new Promise(res => {
+                ;(window as any).resolveTwo = () => res(Two as any)
+              }),
+          )
+          createApp({
+            template: `
+              <div id="container">
+                <transition mode="out-in" :duration="300">
+                  <Suspense :timeout="10">
+                    <component :is="view" :key="name" :data-tick="tick"/>
+                    <template #fallback><div class="fallback">loading</div></template>
+                  </Suspense>
+                </transition>
+              </div>
+              <button id="toggleBtn" @click="click">button</button>
+              <button id="tickBtn" @click="tick++">tick</button>
+            `,
+            setup: () => {
+              const view = shallowRef(One)
+              const name = ref('one')
+              const tick = ref(0)
+              const click = () => {
+                view.value = AsyncTwo
+                name.value = 'two'
+              }
+              return { view, name, tick, click }
+            },
+          }).mount('#app')
+        })
+        await transitionFinish()
+        expect(await html('#container')).toBe(
+          '<div class="test" data-tick="0">one</div>',
+        )
+
+        // navigate to the cold async branch; timeout=10 starts the fallback
+        // swap and the old branch's leave transition
+        await click('#toggleBtn')
+        await timeout(10 + buffer)
+        // unrelated parent re-render while the fallback mount is deferred to
+        // the leaving branch's afterLeave
+        await click('#tickBtn')
+        // the async branch resolves while the leave is still in progress
+        await page().evaluate(() => (window as any).resolveTwo())
+        await transitionFinish(300)
+        await transitionFinish(300)
+        await nextTick()
+        expect(await html('#container')).toContain('two')
+        expect(await html('#container')).not.toContain('loading')
+      },
+      E2E_TIMEOUT,
+    )
+
+    // a parent update that changes the fallback content while its mount is
+    // deferred must mount the latest fallback, not the stale one
+    test(
+      'fallback updated by parent while its mount is deferred',
+      async () => {
+        await page().evaluate(() => {
+          const { createApp, shallowRef, ref, h, defineAsyncComponent } = (
+            window as any
+          ).Vue
+          const One = {
+            setup() {
+              return () => h('div', { class: 'test' }, 'one')
+            },
+          }
+          const Two = {
+            async setup() {
+              return () => h('div', { class: 'test' }, 'two')
+            },
+          }
+          const AsyncTwo = defineAsyncComponent(
+            () =>
+              new Promise(res => {
+                ;(window as any).resolveTwo = () => res(Two as any)
+              }),
+          )
+          createApp({
+            template: `
+              <div id="container">
+                <transition mode="out-in" :duration="300">
+                  <Suspense :timeout="10">
+                    <component :is="view" :key="name" :data-tick="tick"/>
+                    <template #fallback><div class="fallback">loading {{ tick }}</div></template>
+                  </Suspense>
+                </transition>
+              </div>
+              <button id="toggleBtn" @click="click">button</button>
+              <button id="tickBtn" @click="tick++">tick</button>
+            `,
+            setup: () => {
+              const view = shallowRef(One)
+              const name = ref('one')
+              const tick = ref(0)
+              const click = () => {
+                view.value = AsyncTwo
+                name.value = 'two'
+              }
+              return { view, name, tick, click }
+            },
+          }).mount('#app')
+        })
+        await transitionFinish()
+        expect(await html('#container')).toBe(
+          '<div class="test" data-tick="0">one</div>',
+        )
+
+        // navigate to the cold async branch; the fallback mount is deferred
+        // to the old branch's afterLeave
+        await click('#toggleBtn')
+        await timeout(10 + buffer)
+        // parent update changes the fallback content while its mount is
+        // still deferred
+        await click('#tickBtn')
+        // let the leave finish so the (latest) fallback mounts
+        await transitionFinish(300)
+        await nextTick()
+        expect(await html('#container')).toContain('loading 1')
+        // the async branch resolves after the leave completed
+        await page().evaluate(() => (window as any).resolveTwo())
+        await transitionFinish(300)
+        await transitionFinish(300)
+        await nextTick()
+        expect(await html('#container')).toContain('two')
+        expect(await html('#container')).not.toContain('loading')
+      },
+      E2E_TIMEOUT,
+    )
+
     // #14640
     test(
       'switch suspense branches after teleport updates before pending mount finishes',
@@ -2779,6 +2929,87 @@ describe('e2e: Transition', () => {
         expect(await html('#container')).toBe(
           '<!--teleport start--><!--teleport end-->',
         )
+      },
+      E2E_TIMEOUT,
+    )
+
+    // #11910
+    test(
+      'apply transition to teleport component child',
+      async () => {
+        await page().evaluate(() => {
+          const { createApp, ref } = (window as any).Vue
+          createApp({
+            template: `
+            <div id="target"></div>
+            <div id="container">
+              <transition>
+                  <Comp v-if="toggle"></Comp>
+              </transition>
+            </div>
+            <button id="toggleBtn" @click="click">button</button>
+          `,
+            components: {
+              Comp: {
+                template: `
+                    <Teleport to="#target">
+                      <div class="test">content</div>
+                    </Teleport>
+                  `,
+              },
+            },
+            setup: () => {
+              const toggle = ref(false)
+              const click = () => (toggle.value = !toggle.value)
+              return { toggle, click }
+            },
+          }).mount('#app')
+        })
+
+        expect(await html('#target')).toBe('')
+        expect(await html('#container')).toBe('<!--v-if-->')
+
+        const classWhenTransitionStart = () =>
+          page().evaluate(() => {
+            ;(document.querySelector('#toggleBtn') as any)!.click()
+            return Promise.resolve().then(() => {
+              // find the class of teleported node
+              return document
+                .querySelector('#target div')!
+                .className.split(/\s+/g)
+            })
+          })
+
+        // enter
+        expect(await classWhenTransitionStart()).toStrictEqual([
+          'test',
+          'v-enter-from',
+          'v-enter-active',
+        ])
+        await nextFrame()
+        expect(await classList('.test')).toStrictEqual([
+          'test',
+          'v-enter-active',
+          'v-enter-to',
+        ])
+        await transitionFinish()
+        expect(await html('#target')).toBe('<div class="test">content</div>')
+
+        // leave
+        expect(await classWhenTransitionStart()).toStrictEqual([
+          'test',
+          'v-leave-from',
+          'v-leave-active',
+        ])
+        await nextFrame()
+        expect(await classList('.test')).toStrictEqual([
+          'test',
+          'v-leave-active',
+          'v-leave-to',
+        ])
+        await transitionFinish()
+        expect(await html('#target')).toBe('')
+        expect(await html('#container')).toBe('<!--v-if-->')
       },
       E2E_TIMEOUT,
     )

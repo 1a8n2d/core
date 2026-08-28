@@ -1245,6 +1245,79 @@ describe('SSR hydration', () => {
     assertSkipLazyHydration,
   )
 
+  test('unmount a lazily hydrated component that has not hydrated yet', async () => {
+    const Comp = { render: () => h('p', 'hello') }
+    const AsyncComp = defineAsyncComponent({
+      loader: () => Promise.resolve(Comp),
+      // a lazy hydration strategy that has not fired yet, e.g. hydrateOnVisible()
+      // on content that was never scrolled into view
+      hydrate: () => {},
+    })
+
+    const show = ref(true)
+    // the async component is unmounted as part of a parent subtree, which is
+    // what happens on a route change
+    const App = () => h('div', show.value ? [h(AsyncComp)] : [])
+
+    const container = document.createElement('div')
+    container.innerHTML = await renderToString(h(App))
+    document.body.appendChild(container)
+    createSSRApp(App).mount(container)
+
+    // the strategy never fired, so instance.subTree is still null
+    show.value = false
+    await expect(nextTick()).resolves.not.toThrow()
+    // the server-rendered DOM of the never-hydrated component is removed
+    expect(container.innerHTML).toBe('<div></div>')
+  })
+
+  // the #15091 guard skips hydration when the SSR node is detached, which
+  // leaves subTree unset in the same way
+  test('unmount after lazy hydration was skipped for a detached node', async () => {
+    let observer!: IntersectionObserver
+    let observerCallback!: IntersectionObserverCallback
+    const originalIntersectionObserver = globalThis.IntersectionObserver
+    globalThis.IntersectionObserver = class {
+      constructor(callback: IntersectionObserverCallback) {
+        observer = this as any
+        observerCallback = callback
+      }
+      disconnect() {}
+      observe() {}
+    } as any
+
+    try {
+      const Comp = vi.fn(() => h('p', 'hello'))
+      const AsyncComp = defineAsyncComponent({
+        loader: () => Promise.resolve(Comp),
+        hydrate: hydrateOnVisible(),
+      })
+      const show = ref(true)
+      const App = () => h('div', show.value ? [h(AsyncComp)] : [])
+
+      const container = document.createElement('div')
+      container.innerHTML = await renderToString(h(App))
+      document.body.appendChild(container)
+      Comp.mockClear()
+      createSSRApp(App).mount(container)
+
+      // detach, then let the observer fire: hydration bails out
+      const el: Element = container.querySelector('p')!
+      el.remove()
+      observerCallback(
+        [{ isIntersecting: true, target: el } as IntersectionObserverEntry],
+        observer,
+      )
+      await nextTick()
+      expect(Comp).not.toHaveBeenCalled()
+
+      show.value = false
+      await expect(nextTick()).resolves.not.toThrow()
+    } finally {
+      globalThis.IntersectionObserver = originalIntersectionObserver
+    }
+  })
+
   test('update async wrapper before resolve', async () => {
     const Comp = {
       render() {
@@ -1639,6 +1712,45 @@ describe('SSR hydration', () => {
     resolve({})
   })
 
+  test('move async wrapper before load (fragment)', async () => {
+    let resolve: any
+    const Comp = vi.fn(() => [h('i', 'one'), h('b', 'two')])
+    const AsyncComp = defineAsyncComponent(
+      () =>
+        new Promise(r => {
+          resolve = r
+        }),
+    )
+
+    const reverse = ref(false)
+    const root = document.createElement('div')
+    root.innerHTML =
+      '<div><span>tail</span><!--[--><i>one</i><b>two</b><!--]--></div>'
+
+    createSSRApp({
+      render() {
+        const asyncComp = h(AsyncComp, { key: 'async' })
+        const sibling = h('span', { key: 'sibling' }, 'tail')
+        return h(
+          'div',
+          reverse.value ? [asyncComp, sibling] : [sibling, asyncComp],
+        )
+      },
+    }).mount(root)
+
+    reverse.value = true
+    await nextTick()
+    expect(root.innerHTML).toBe(
+      '<div><!--[--><i>one</i><b>two</b><!--]--><span>tail</span></div>',
+    )
+    resolve(Comp)
+    await new Promise(r => setTimeout(r))
+    expect(Comp).toHaveBeenCalled()
+    expect(root.innerHTML).toBe(
+      '<div><!--[--><i>one</i><b>two</b><!--]--><span>tail</span></div>',
+    )
+  })
+
   test('elements with camel-case in svg ', () => {
     const { vnode, container } = mountWithHydration(
       '<animateTransform></animateTransform>',
@@ -1690,6 +1802,24 @@ describe('SSR hydration', () => {
         ),
     )
     expect((container.firstChild as any)._trueValue).toBe(true)
+  })
+
+  test('preserves text entered before v-model hydration', async () => {
+    const state = reactive({ text: 'server value' })
+    const App = {
+      setup: () => state,
+      template: `<input v-model="text">`,
+    }
+    const container = document.createElement('div')
+    container.innerHTML = await renderToString(h(App))
+    const input = container.firstChild as HTMLInputElement
+    input.value = 'user value'
+
+    createSSRApp(App).mount(container)
+    await nextTick()
+
+    expect(input.value).toBe('user value')
+    expect(state.text).toBe('user value')
   })
 
   test('force hydrate checkbox with indeterminate', () => {
@@ -2469,6 +2599,60 @@ describe('SSR hydration', () => {
       expect(`Hydration attribute mismatch`).not.toHaveBeenWarned()
     })
 
+    test('hidden enumerated attribute', () => {
+      mountWithHydration(`<div></div>`, () => h('div', { hidden: false }))
+      expect(`Hydration attribute mismatch`).not.toHaveBeenWarned()
+
+      mountWithHydration(`<div hidden></div>`, () => h('div', { hidden: true }))
+      expect(`Hydration attribute mismatch`).not.toHaveBeenWarned()
+
+      mountWithHydration(`<div hidden></div>`, () =>
+        h('div', { hidden: 'hidden' }),
+      )
+      expect(`Hydration attribute mismatch`).not.toHaveBeenWarned()
+
+      mountWithHydration(`<div hidden="anything"></div>`, () =>
+        h('div', { hidden: true }),
+      )
+      expect(`Hydration attribute mismatch`).not.toHaveBeenWarned()
+
+      mountWithHydration(`<div hidden="until-found"></div>`, () =>
+        h('div', { hidden: 'until-found' }),
+      )
+      expect(`Hydration attribute mismatch`).not.toHaveBeenWarned()
+
+      mountWithHydration(`<div hidden="UNTIL-FOUND"></div>`, () =>
+        h('div', { hidden: 'until-found' }),
+      )
+      expect(`Hydration attribute mismatch`).not.toHaveBeenWarned()
+    })
+
+    test('hidden numeric values', () => {
+      mountWithHydration(`<div></div>`, () => h('div', { hidden: 0 }))
+      expect(`Hydration attribute mismatch`).not.toHaveBeenWarned()
+
+      mountWithHydration(`<div></div>`, () => h('div', { hidden: NaN }))
+      expect(`Hydration attribute mismatch`).not.toHaveBeenWarned()
+
+      mountWithHydration(`<div hidden></div>`, () => h('div', { hidden: 1 }))
+      expect(`Hydration attribute mismatch`).not.toHaveBeenWarned()
+
+      mountWithHydration(`<div hidden="0"></div>`, () =>
+        h('div', { hidden: '0' }),
+      )
+      expect(`Hydration attribute mismatch`).not.toHaveBeenWarned()
+    })
+
+    test('hidden state mismatch', () => {
+      mountWithHydration(`<div hidden="until-found"></div>`, () =>
+        h('div', { hidden: true }),
+      )
+      expect(`Hydration attribute mismatch`).toHaveBeenWarnedTimes(1)
+
+      mountWithHydration(`<div hidden></div>`, () => h('div', { hidden: 0 }))
+      expect(`Hydration attribute mismatch`).toHaveBeenWarnedTimes(2)
+    })
+
     test('client value is null or undefined', () => {
       mountWithHydration(`<div></div>`, () =>
         h('div', { draggable: undefined }),
@@ -2804,6 +2988,56 @@ describe('SSR hydration', () => {
           ),
         )
         expect(container.innerHTML).toBe(`<div><div>client</div></div>`)
+      } finally {
+        __DEV__ = true
+      }
+    })
+
+    test('does not re-write unchanged resource props when hydrating', () => {
+      __DEV__ = false
+      try {
+        const container = document.createElement('div')
+        container.innerHTML = `<img src="/foo.png">`
+        const el = container.firstChild as HTMLImageElement
+        const setSrc = vi.fn()
+        Object.defineProperty(el, 'src', {
+          configurable: true,
+          get: () => el.getAttribute('src'),
+          set: setSrc,
+        })
+        createSSRApp({
+          render: () =>
+            createElementVNode(
+              'img',
+              { src: '/foo.png' },
+              null,
+              PatchFlags.PROPS,
+              ['src'],
+            ),
+        }).mount(container)
+        expect(setSrc).not.toHaveBeenCalled()
+        expect(el.getAttribute('src')).toBe('/foo.png')
+      } finally {
+        __DEV__ = true
+      }
+    })
+
+    test('still patches resource props when server and client values differ', () => {
+      __DEV__ = false
+      try {
+        const { container } = mountWithHydration(
+          `<img src="/server.png">`,
+          () =>
+            createElementVNode(
+              'img',
+              { src: '/client.png' },
+              null,
+              PatchFlags.PROPS,
+              ['src'],
+            ),
+        )
+        const el = container.firstChild as HTMLImageElement
+        expect(el.getAttribute('src')).toBe('/client.png')
       } finally {
         __DEV__ = true
       }

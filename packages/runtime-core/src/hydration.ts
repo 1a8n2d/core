@@ -11,7 +11,7 @@ import {
   normalizeVNode,
 } from './vnode'
 import { flushPostFlushCbs } from './scheduler'
-import type { ComponentInternalInstance, ComponentOptions } from './component'
+import type { ComponentInternalInstance } from './component'
 import { invokeDirectiveHook } from './directives'
 import { warn } from './warning'
 import {
@@ -309,13 +309,17 @@ export function createHydrationFunctions(
           // if component is async, it may get moved / unmounted before its
           // inner component is loaded, so we need to give it a placeholder
           // vnode that matches its adopted DOM.
-          if (
-            isAsyncWrapper(vnode) &&
-            !(vnode.type as ComponentOptions).__asyncResolved
-          ) {
+          //
+          // This covers two cases, both of which leave subTree unset:
+          // - the component has not resolved yet
+          // - the component has resolved, but uses a lazy hydration strategy
+          //   that has not fired yet, so hydrating its subtree was deferred
+          if (isAsyncWrapper(vnode) && !vnode.component!.subTree) {
             let subTree
             if (isFragmentStart) {
-              subTree = createVNode(Fragment)
+              // the async component has no child vnodes yet, so represent its
+              // adopted DOM as an opaque range that can be moved or removed
+              subTree = createVNode(Static)
               subTree.anchor = nextNode
                 ? nextNode.previousSibling
                 : container.lastChild
@@ -525,6 +529,9 @@ export function createHydrationFunctions(
               (isCustomElement && !isReservedProp(key)) ||
               (dynamicProps && dynamicProps.includes(key))
             ) {
+              if (isUnchangedResourceProp(el, key, props[key])) {
+                continue
+              }
               patchProp(el, key, null, props[key], namespace, parentComponent)
             }
           }
@@ -806,6 +813,24 @@ export function createHydrationFunctions(
 /**
  * Dev only
  */
+// attributes whose assignment triggers a (re)fetch of a resource
+const resourceProps = /*@__PURE__*/ new Set(['src', 'srcset', 'href', 'poster'])
+
+function isUnchangedResourceProp(
+  el: Element,
+  key: string,
+  clientValue: any,
+): boolean {
+  if (!resourceProps.has(key)) {
+    return false
+  }
+  // compare against the rendered attribute rather than the reflected DOM
+  // property, which normalizes URLs to absolute form.
+  return (
+    el.getAttribute(key) === (clientValue == null ? null : `${clientValue}`)
+  )
+}
+
 function propHasMismatch(
   el: Element & { $cls?: string },
   key: string,
@@ -861,7 +886,10 @@ function propHasMismatch(
     (el instanceof SVGElement && isKnownSvgAttr(key)) ||
     (el instanceof HTMLElement && (isBooleanAttr(key) || isKnownHtmlAttr(key)))
   ) {
-    if (isBooleanAttr(key)) {
+    if (key === 'hidden') {
+      actual = normalizeHiddenValue(el.getAttribute(key))
+      expected = normalizeHiddenValue(clientValue)
+    } else if (isBooleanAttr(key)) {
       actual = el.hasAttribute(key)
       expected = includeBooleanAttr(clientValue)
     } else if (clientValue == null) {
@@ -906,6 +934,18 @@ function propHasMismatch(
     return true
   }
   return false
+}
+
+function normalizeHiddenValue(value: unknown): false | '' | 'until-found' {
+  if (!isRenderableAttrValue(value)) {
+    return false
+  }
+  if (isString(value)) {
+    // Attribute values from the DOM are strings, while numeric client values
+    // follow the `hidden` property setter, where 0 and NaN remove the attribute.
+    return value.toLowerCase() === 'until-found' ? 'until-found' : ''
+  }
+  return includeBooleanAttr(value) ? '' : false
 }
 
 function toClassSet(str: string): Set<string> {
