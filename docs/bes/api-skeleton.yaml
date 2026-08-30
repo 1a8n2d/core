@@ -69,6 +69,56 @@ paths:
       x-bes-module: Platform Connectors
       responses:
         '202': { description: Connector generation task accepted }
+  /api/publishing/accounts:
+    post:
+      summary: Save or update a Telegram publication account after first binding.
+      x-bes-module: Publishing UX
+      responses:
+        '201': { description: Publication account saved }
+    get:
+      summary: List saved publication accounts with favorites, recent accounts, and quick-search metadata.
+      x-bes-module: Publishing UX
+      responses:
+        '200': { description: Saved publication accounts }
+  /api/publishing/releases/{releaseId}/preview:
+    post:
+      summary: Generate the exact release image and post payload used for live preview and publication.
+      x-bes-module: Publishing UX
+      responses:
+        '200': { description: Publication preview generated }
+  /api/publishing/releases/{releaseId}/telegram:
+    post:
+      summary: Publish a release post to Telegram with normalized errors, audit logging, and temporary-failure retries.
+      x-bes-module: Publishing Worker
+      responses:
+        '202': { description: Telegram publication accepted }
+        '422': { description: Publication validation failed }
+        '502':
+          { description: Telegram publication failed with user-facing reason }
+  /api/publishing/jobs/{jobId}/errors:
+    get:
+      summary: Return safe publication error log entries for a failed or retried publication job.
+      x-bes-module: Publishing Worker
+      responses:
+        '200': { description: Publication error log }
+  /api/publishing/settings/{settingsId}:
+    patch:
+      summary: Autosave an instant settings change and append an undo-history entry.
+      x-bes-module: Publishing UX
+      responses:
+        '200': { description: Settings autosaved }
+  /api/publishing/settings/{settingsId}/undo:
+    post:
+      summary: Undo the latest publishing settings change.
+      x-bes-module: Publishing UX
+      responses:
+        '200': { description: Settings change undone }
+  /api/publishing/settings/{settingsId}/redo:
+    post:
+      summary: Redo the latest undone publishing settings change.
+      x-bes-module: Publishing UX
+      responses:
+        '200': { description: Settings change redone }
   /api/analytics/reports:
     get:
       summary: Query analytics reports for streams, revenue, audience, growth, and forecasts.
@@ -134,3 +184,60 @@ components:
         authType: { type: string }
         approvalPolicy:
           { type: string, enum: [internal_only, human_approval_required] }
+
+    PublicationAccount:
+      type: object
+      required: [id, type, displayName, username, permissionStatus]
+      properties:
+        id: { type: string }
+        type: { type: string, enum: [channel, group, bot] }
+        displayName: { type: string }
+        username: { type: string }
+        avatarUrl: { type: string }
+        favorite: { type: boolean }
+        lastUsedAt: { type: string, format: date-time }
+        permissionStatus:
+          { type: string, enum: [unknown, valid, missing_rights, invalid] }
+    PublicationJob:
+      type: object
+      required: [id, releaseId, accountId, status, attempts]
+      properties:
+        id: { type: string }
+        releaseId: { type: string }
+        accountId: { type: string }
+        status:
+          {
+            type: string,
+            enum: [queued, generating, sending, retrying, published, failed],
+          }
+        attempts: { type: integer, minimum: 0 }
+        lastErrorCode: { type: string }
+        lastErrorMessage: { type: string }
+        nextRetryAt: { type: string, format: date-time }
+    PublishingSettings:
+      type: object
+      required: [id, preset, toggles, layout, autosaveRevision]
+      properties:
+        id: { type: string }
+        preset:
+          {
+            type: string,
+            enum: [telegram, vk, discord, instagram, youtube, custom],
+          }
+        toggles:
+          type: object
+          additionalProperties: { type: boolean }
+        layout:
+          type: object
+          properties:
+            logoSize: { type: integer }
+            avatarSize: { type: integer }
+            coverSize: { type: integer }
+            releaseImageSize: { type: integer }
+            watermarkSize: { type: integer }
+            padding: { type: integer }
+            borderRadius: { type: integer }
+            opacity: { type: number, minimum: 0, maximum: 1 }
+        templateId: { type: string }
+        autosaveRevision: { type: integer }
+        previewSnapshotId: { type: string }
