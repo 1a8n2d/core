@@ -90,6 +90,7 @@ paths:
     post:
       summary: Publish a release post to Telegram with normalized errors, audit logging, and temporary-failure retries.
       x-bes-module: Publishing Worker
+      x-human-approval-required: true
       responses:
         '202': { description: Telegram publication accepted }
         '422': { description: Publication validation failed }
