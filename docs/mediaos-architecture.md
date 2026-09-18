@@ -24,7 +24,7 @@ Delivery
 Analytics
 ```
 
-A user opens Telegram, taps **Create Release**, chooses a track, cover art, and genre, then the pipeline prepares the release automatically. The user only confirms publication.
+A user opens Telegram, taps **Create Release**, chooses a track, cover art, and genre, then the pipeline prepares the release automatically. Before the system can submit the release to any external platform, the user must explicitly approve the validated release for publication.
 
 ## Release Pipeline
 
@@ -38,6 +38,8 @@ Metadata generation
 Encoding
   ↓
 Validation
+  ↓
+User approval
   ↓
 Publishing
   ↓
@@ -89,6 +91,7 @@ Responsibilities:
 - Queue-backed release processing.
 - Idempotent publishing operations.
 - Audit trail for release status transitions.
+- Enforced approval gate: external publishing is permitted only when the release is explicitly approved by the user.
 
 ### AI Engine
 
@@ -185,17 +188,19 @@ The Automation Engine runs release rules and scheduled actions.
 
 Examples:
 
-- Auto-publish after validation.
+- Auto-publish an explicitly approved release after validation and any configured schedule is met.
 - Require manual approval for low QA score.
 - Retry failed delivery jobs.
 - Notify Telegram when a release changes status.
 - Trigger analytics snapshots after publication.
 
+Validation alone must never authorize external publishing. Automation rules may enqueue delivery only for releases that are in an explicitly user-approved state; the approval must be recorded in the release audit trail and invalidated when release assets or metadata change.
+
 ## Data Model
 
 Core entities:
 
-- `Release`: the user-facing release unit.
+- `Release`: the user-facing release unit, including validation and explicit user-approval state required before external publishing.
 - `TrackAsset`: original uploaded audio.
 - `CoverAsset`: original and normalized cover images.
 - `EncodedAsset`: generated MP3, FLAC, MP4, and preview files.
@@ -218,12 +223,15 @@ POST   /api/releases/:id/assets/cover
 POST   /api/releases/:id/analyze
 POST   /api/releases/:id/encode
 POST   /api/releases/:id/validate
+POST   /api/releases/:id/approve
 POST   /api/releases/:id/publish
 GET    /api/releases/:id/events
 GET    /api/releases/:id/analytics
 ```
 
 All mutation endpoints should be idempotent by release id and operation key.
+
+`POST /api/releases/:id/publish` and all delivery jobs must reject releases that have not been explicitly approved by the user after their latest validation. An approval must identify the approving user and timestamp, and be invalidated when material release data changes.
 
 ## Worker Queue
 
@@ -236,11 +244,11 @@ Recommended job types:
 - `asset.encode.mp4`.
 - `asset.preview.generate`.
 - `release.validate`.
-- `delivery.publish.telegram`.
-- `delivery.publish.bibblio`.
-- `delivery.publish.youtube`.
-- `delivery.publish.soundcloud`.
-- `delivery.publish.spotify`.
+- `delivery.publish.telegram` (only for explicitly approved releases).
+- `delivery.publish.bibblio` (only for explicitly approved releases).
+- `delivery.publish.youtube` (only for explicitly approved releases).
+- `delivery.publish.soundcloud` (only for explicitly approved releases).
+- `delivery.publish.spotify` (only for explicitly approved releases).
 - `analytics.sync`.
 
 Each worker must emit structured logs, metrics, and tracing spans.
